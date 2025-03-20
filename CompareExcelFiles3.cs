@@ -18,7 +18,7 @@ namespace OutSystems.NssCompareExcelFiles3
         {
             using (MemoryStream stream = new MemoryStream())
             {
-                stream.Write(fileBytes, 0, fileBytes.Length); // Copy content to an expandable MemoryStream
+                stream.Write(fileBytes, 0, fileBytes.Length);
                 stream.Position = 0;
 
                 using (SpreadsheetDocument document = SpreadsheetDocument.Open(stream, true))
@@ -35,7 +35,7 @@ namespace OutSystems.NssCompareExcelFiles3
                             {
                                 if (color.Rgb != null && (color.Rgb.Value.Length != 8 || color.Rgb.Value == "0"))
                                 {
-                                    color.Rgb.Value = "FF000000"; // Default to black if invalid
+                                    color.Rgb.Value = "FF000000"; // Default to black
                                     modified = true;
                                 }
                             }
@@ -43,17 +43,30 @@ namespace OutSystems.NssCompareExcelFiles3
 
                         foreach (var fill in stylesheet.Fills.Elements<Fill>())
                         {
-                            var fgColor = fill.PatternFill != null ? fill.PatternFill.ForegroundColor : null;
-                            var bgColor = fill.PatternFill != null ? fill.PatternFill.BackgroundColor : null;
-                            if (fgColor != null && (fgColor.Rgb == null || fgColor.Rgb.Value.Length != 8 || fgColor.Rgb.Value == "0"))
+                            var patternFill = fill.PatternFill;
+                            if (patternFill != null)
                             {
-                                fgColor.Rgb = new HexBinaryValue("FFFFFFFF"); // Default to white if invalid
-                                modified = true;
-                            }
-                            if (bgColor != null && (bgColor.Rgb == null || bgColor.Rgb.Value.Length != 8 || bgColor.Rgb.Value == "0"))
-                            {
-                                bgColor.Rgb = new HexBinaryValue("FFFFFFFF"); // Default to white if invalid
-                                modified = true;
+                                // Process Foreground Color
+                                var fgColor = patternFill.ForegroundColor;
+                                if (fgColor != null && fgColor.Rgb != null)
+                                {
+                                    if (fgColor.Rgb.Value.Length != 8 || fgColor.Rgb.Value == "0")
+                                    {
+                                        fgColor.Rgb = new HexBinaryValue("FFFFFFFF");
+                                        modified = true;
+                                    }
+                                }
+
+                                // Process Background Color
+                                var bgColor = patternFill.BackgroundColor;
+                                if (bgColor != null && bgColor.Rgb != null)
+                                {
+                                    if (bgColor.Rgb.Value.Length != 8 || bgColor.Rgb.Value == "0")
+                                    {
+                                        bgColor.Rgb = new HexBinaryValue("FFFFFFFF");
+                                        modified = true;
+                                    }
+                                }
                             }
                         }
 
@@ -69,7 +82,7 @@ namespace OutSystems.NssCompareExcelFiles3
                     }
                 }
 
-                return stream.ToArray(); // Return the modified byte array
+                return stream.ToArray();
             }
         }
         // Method to create a basic ClosedXML workbook and return its byte array
@@ -151,70 +164,70 @@ namespace OutSystems.NssCompareExcelFiles3
                             }
 
                             var resultSheet = workbookResult.AddWorksheet(sheet2.Name);
-                            //int maxColsSheet1 = GetLastUsedColumn(sheet1);
-                            //int maxColsSheet2 = GetLastUsedColumn(sheet2);
-                            //int maxColumns = Math.Max(maxColsSheet1, maxColsSheet2);
 
-                            int maxColumns = GetMaxColumn(sheet1, sheet2);
-
-                            CopyRowsToSheet(1, headerRow, maxColumns, sheet1, resultSheet);
+                            int maxColumn = GetMaxColumn(sheet1, sheet2);
+                            CopyRowsToSheet(1, headerRow, maxColumn, sheet1, resultSheet);
                             bool sheetHasDifferences = false;
                             var headerRowMapExcel1 = GetHeaderRowMap(sheet1, headerRow);
                             var headerRowMapExcel2 = GetHeaderRowMap(sheet2, headerRow);
-                            AddEmptyColumns(sheet1, sheet2, maxColumns, headerRow, headerRowMapExcel1, headerRowMapExcel2);
+                            AddEmptyColumns(sheet1, sheet2, maxColumn, headerRow, headerRowMapExcel1, headerRowMapExcel2);
+                            
 
-                            maxColumns = GetMaxColumn(sheet1, sheet2);
-
+                            // Get the max column again because it might've changed
+                            maxColumn = GetMaxColumn(sheet1, sheet2);
                             int resultRowCounter = headerRow;
                             // Compare the header row between the 2 excel files
-                            ProcessHeaderRow(sheet1, sheet2, resultSheet, headerRow, maxColumns, ref resultRowCounter, headerRowMapExcel1, headerRowMapExcel2, ref sheetHasDifferences);
+                            ProcessHeaderRow(sheet1, sheet2, resultSheet, headerRow, maxColumn, ref resultRowCounter, headerRowMapExcel1, headerRowMapExcel2, ref sheetHasDifferences);
 
-                            var rowMapExcel1 = GetRowMap(sheet1, headerRow, maxColumns, ssUniqueColsList);
-                            var rowMapExcel2 = GetRowMap(sheet2, headerRow, maxColumns, ssUniqueColsList);
+                            var rowMapExcel1 = GetRowMap(sheet1, headerRow, maxColumn, ssUniqueColsList);
+                            var rowMapExcel2 = GetRowMap(sheet2, headerRow, maxColumn, ssUniqueColsList);
                             int rowToMoveToTheEnd = -1;
 
                             // Start after header row
                             for (int row = headerRow + 1; row <= Math.Max(GetLastUsedRow(sheet1), GetLastUsedRow(sheet2)); row++)
                             {
-                                int row1Key = sheet1.Cell(row, 1).IsEmpty() ? "".GetHashCode() : GetRowKey(row, sheet1, maxColumns, ssUniqueColsList);
+                                int row1Key = sheet1.Cell(row, 1).IsEmpty() ? "".GetHashCode() : GetRowKey(row, sheet1, maxColumn, ssUniqueColsList);
                                 int rowNumInExcel2;
 
-                                if (sheet1.Cell(row, 1).GetString().Contains(ACCESS_AREA_RESTRICTIONS))
+                                if (sheet2.Cell(row, 1).GetString().Contains(ACCESS_AREA_RESTRICTIONS))
                                 {
                                     rowToMoveToTheEnd = row;
+
                                     continue;
                                 }
 
+                                if (sheet1.Cell(row, 1).GetString().Contains(ACCESS_AREA_RESTRICTIONS))
+                                {
+                                    continue;
+                                }
                                 if (rowMapExcel2.TryGetValue(row1Key, out rowNumInExcel2))
                                 {
-                                    ProcessRow(sheet1, sheet2, resultSheet, row, rowNumInExcel2, maxColumns, ref resultRowCounter, ref sheetHasDifferences);
+                                    ProcessRow(sheet1, sheet2, resultSheet, row, rowNumInExcel2, maxColumn, ref resultRowCounter, ref sheetHasDifferences);
                                 }
                                 else
                                 {
-                                    MarkRowAsDeleted(sheet1, resultSheet, row, maxColumns, ref resultRowCounter);
+                                    MarkRowAsDeleted(sheet1, resultSheet, row, maxColumn, ref resultRowCounter);
                                     sheetHasDifferences = true;
                                 }
 
-                                int row2Key = sheet2.Cell(row, 1).IsEmpty() ? "".GetHashCode() : GetRowKey(row, sheet2, maxColumns, ssUniqueColsList);
+                                int row2Key = sheet2.Cell(row, 1).IsEmpty() ? "".GetHashCode() : GetRowKey(row, sheet2, maxColumn, ssUniqueColsList);
                                 if (!rowMapExcel1.ContainsKey(row2Key))
                                 {
-                                    MarkRowAsAdded(sheet2, resultSheet, row, maxColumns, ref resultRowCounter);
+                                    MarkRowAsAdded(sheet2, resultSheet, row, maxColumn, ref resultRowCounter);
                                     sheetHasDifferences = true;
                                 }
                             }
 
-                            AdjustColumnWidthsAndStyles(sheet1, resultSheet, headerRow, maxColumns);
+                            AdjustColumnWidthsAndStyles(sheet1, resultSheet, headerRow, maxColumn);
 
                             // Move specific row to the end if conditions are met
                             if (rowToMoveToTheEnd != -1 && ssTypeOfDocument == BAMatrix && ssWhichProcess == STANDARDISATION && sheetPair.SheetIndex == 0)
                             {
-                                MoveRowToTheEnd(sheet1, resultSheet, rowToMoveToTheEnd, resultRowCounter, maxColumns);
+                                MoveRowToTheEnd(sheet2, resultSheet, rowToMoveToTheEnd, resultRowCounter, maxColumn);
                             }
 
                             DeleteEmptyRows(resultSheet, headerRow, resultRowCounter);
-                            
                             DeleteEmptyColumns(resultSheet, headerRow);
-
                             lock (differences)
                             {
                                 differences.Add(sheetHasDifferences);
@@ -347,6 +360,7 @@ namespace OutSystems.NssCompareExcelFiles3
                 else
                 {
                     resultCell.Value = cell1.Value;
+                    resultCell.Style = cell1.Style;
                 }
             }
             resultRowCounter++;
@@ -465,7 +479,6 @@ namespace OutSystems.NssCompareExcelFiles3
             int maxColsSheet1 = GetLastUsedColumn(sheet1);
             int maxColsSheet2 = GetLastUsedColumn(sheet2);
             return Math.Max(maxColsSheet1, maxColsSheet2);
-
         }
 
         // Copies a range of rows from one sheet to another
@@ -497,12 +510,12 @@ namespace OutSystems.NssCompareExcelFiles3
 
         private void DeleteEmptyColumns(IXLWorksheet sheet, int headerRow)
         {
-            //idetify the first and last columns in use
+            // Identify the first and last columns in use
             var firstCol = sheet.FirstColumnUsed().ColumnNumber();
             var lastCol = sheet.LastColumnUsed().ColumnNumber();
 
-            //iterate from right to left so column indices remain valid after deletions
-            for (int col = lastCol; col >= firstCol; col--) 
+            // Iterate from right to left so column indices remain valid after deletions
+            for (int col = lastCol; col >= firstCol; col--)
             {
                 var headerCell = sheet.Cell(headerRow, col);
                 if (headerCell.IsEmpty())
@@ -512,8 +525,8 @@ namespace OutSystems.NssCompareExcelFiles3
             }
         }
 
-            // Moves a specific row to the end of the result sheet
-            private void MoveRowToTheEnd(IXLWorksheet srcSheet, IXLWorksheet resultSheet, int srcRow, int lastUsedRow, int maxColumns)
+        // Moves a specific row to the end of the result sheet
+        private void MoveRowToTheEnd(IXLWorksheet srcSheet, IXLWorksheet resultSheet, int srcRow, int lastUsedRow, int maxColumns)
         {
             for (int column = 1; column <= maxColumns; column++)
             {
@@ -522,7 +535,6 @@ namespace OutSystems.NssCompareExcelFiles3
                 dstCell.Value = srcCell.Value;
                 dstCell.Style = srcCell.Style;
             }
-            resultSheet.Row(srcRow).Delete();
         }
 
         // Logs the messages into Outsystems
@@ -544,16 +556,20 @@ namespace OutSystems.NssCompareExcelFiles3
         //}
 
         // Utility function used for dev purposes. You can call it like this:
-        private void SaveExcelFiles(XLWorkbook workbook1, XLWorkbook workbook2, string filePath1, string filePath2)
+        //SaveExcelFiles(workbook1, workbook2, workbookResult, "C:\\Users\\YJ592UU\\OneDrive - EY\\Desktop\\Work\\Engagements\\BoC\\Bank of Cyprus\\optimised_excel_comparison\\test_files2\\OUT1.xlsx", "C:\\Users\\YJ592UU\\OneDrive - EY\\Desktop\\Work\\Engagements\\BoC\\Bank of Cyprus\\optimised_excel_comparison\\test_files2\\OUT2.xlsx", "C:\\Users\\YJ592UU\\OneDrive - EY\\Desktop\\Work\\Engagements\\BoC\\Bank of Cyprus\\optimised_excel_comparison\\test_files2\\tempRes.xlsx");
+        private void SaveExcelFiles(XLWorkbook workbook1, XLWorkbook workbook2, XLWorkbook resWorkbook,  string filePath1, string filePath2, string resPath)
         {
             using (var stream1 = new MemoryStream())
             using (var stream2 = new MemoryStream())
+            using (var resultStream = new MemoryStream())
             {
                 workbook1.SaveAs(stream1);
                 workbook2.SaveAs(stream2);
+                resWorkbook.SaveAs(resultStream);
 
                 File.WriteAllBytes(filePath1, stream1.ToArray());
                 File.WriteAllBytes(filePath2, stream2.ToArray());
+                File.WriteAllBytes(resPath, resultStream.ToArray());
             }
         }
     }
